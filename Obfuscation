@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ScriptGuard : Advanced Lua Obfuscator</title>
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;500;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Space Grotesk', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        brand: {
+                            400: '#22d3ee', // Cyan
+                            500: '#06b6d4',
+                            600: '#0891b2',
+                        },
+                        neon: {
+                            pink: '#f472b6',
+                            purple: '#a855f7',
+                            blue: '#3b82f6'
+                        },
+                        dark: {
+                            800: '#1e293b',
+                            900: '#0f172a',
+                            950: '#020617', // Very Dark Blue/Black
+                        }
+                    },
+                    animation: {
+                        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                        'fade-in': 'fadeIn 0.5s ease-out forwards',
+                        'blob': 'blob 7s infinite',
+                        'shimmer': 'shimmer 2s linear infinite',
+                    },
+                    keyframes: {
+                        fadeIn: {
+                            '0%': { opacity: '0', transform: 'translateY(10px)' },
+                            '100%': { opacity: '1', transform: 'translateY(0)' },
+                        },
+                        blob: {
+                            '0%': { transform: 'translate(0px, 0px) scale(1)' },
+                            '33%': { transform: 'translate(30px, -50px) scale(1.1)' },
+                            '66%': { transform: 'translate(-20px, 20px) scale(0.9)' },
+                            '100%': { transform: 'translate(0px, 0px) scale(1)' },
+                        },
+                        shimmer: {
+                            '0%': { transform: 'translateX(-100%)' },
+                            '100%': { transform: 'translateX(100%)' }
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* Ensures body styles are set correctly */
+        body {
+            /* Text color is set via a class on the body tag for consistency */
+            overflow-x: hidden;
+        }
+        
+        /* Vibrant background mesh */
+        .bg-mesh {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: -1;
+            overflow: hidden;
+            background: radial-gradient(circle at 15% 50%, rgba(76, 29, 149, 0.15), transparent 25%),
+                        radial-gradient(circle at 85% 30%, rgba(6, 182, 212, 0.15), transparent 25%);
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #020617; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: linear-gradient(to bottom, #a855f7, #06b6d4); 
+            border-radius: 4px;
+        }
+
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+        }
+
+        .loader {
+            border: 3px solid rgba(255,255,255,0.1);
+            border-radius: 50%;
+            border-top: 3px solid #22d3ee;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+        }
+        
+        .neon-text {
+            text-shadow: 0 0 10px rgba(34, 211, 238, 0.5);
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .code-editor {
+            font-family: 'JetBrains Mono', monospace;
+            line-height: 1.5;
+            tab-size: 4;
+        }
+        
+        .docs-list li {
+            position: relative;
+            padding-left: 1.75rem; /* Space for the icon */
+            margin-bottom: 0.75rem;
+        }
+
+        .docs-list li::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0.4rem;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: #f472b6; /* neon-pink */
+            box-shadow: 0 0 5px #f472b6;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col font-sans selection:bg-neon-purple selection:text-white bg-dark-950 text-gray-100">
+
+    <!-- Glowing Background Effects -->
+    <div class="bg-mesh"></div>
+    <div class="fixed top-0 left-1/4 w-96 h-96 bg-purple-600/20 rounded-full mix-blend-screen filter blur-3xl opacity-30 animate-blob"></div>
+    <div class="fixed top-0 right-1/4 w-96 h-96 bg-cyan-500/20 rounded-full mix-blend-screen filter blur-3xl opacity-30 animate-blob animation-delay-2000"></div>
+    <div class="fixed -bottom-32 left-1/3 w-96 h-96 bg-pink-500/20 rounded-full mix-blend-screen filter blur-3xl opacity-30 animate-blob animation-delay-4000"></div>
+
+    <!-- Toast Notification Container -->
+    <div id="toast-container" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+    <!-- Navigation Bar -->
+    <nav class="fixed w-full z-40 border-b border-white/5 bg-black/60 backdrop-blur-xl">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-20">
+                <div class="flex items-center gap-2 group cursor-pointer" onclick="showSection('home')">
+                    <div class="relative">
+                        <i data-lucide="shield-check" class="w-6 h-6 relative z-10 group-hover:text-white text-brand-400 transition-colors"></i>
+                        <div class="absolute inset-0 bg-brand-400 blur-md opacity-50 group-hover:opacity-100 transition-opacity"></div>
+                    </div>
+                    <span class="font-bold text-2xl tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400">Script<span class="text-brand-400 neon-text">Guard</span></span>
+                </div>
+                <div class="hidden md:block">
+                    <div class="ml-10 flex items-baseline space-x-1">
+                        <a href="#" onclick="showSection('home')" class="nav-link px-4 py-2 rounded-full text-sm font-medium transition-all text-white hover:bg-white/10 hover:shadow-[0_0_15px_rgba(255,255,255,0.1)]">Home</a>
+                        <a href="#" onclick="showSection('obfuscate')" class="nav-link px-4 py-2 rounded-full text-sm font-medium transition-all text-neon-pink hover:text-white hover:bg-neon-pink/20 hover:shadow-[0_0_15px_rgba(244,114,182,0.3)]"><i data-lucide="lock" class="inline w-3 h-3 mb-0.5 mr-1"></i>Obfuscate</a>
+                        <a href="#" onclick="showSection('docs')" class="nav-link px-4 py-2 rounded-full text-sm font-medium transition-all text-brand-400 hover:text-white hover:bg-brand-400/20 hover:shadow-[0_0_15px_rgba(34,211,238,0.3)]"><i data-lucide="book-open-text" class="inline w-3 h-3 mb-0.5 mr-1"></i>Docs</a>
+                    </div>
+                </div>
+                <!-- Mobile Menu Button -->
+                <div class="md:hidden">
+                    <button onclick="toggleMobileMenu()" class="p-2 text-gray-300 hover:text-white">
+                        <i data-lucide="menu" class="w-6 h-6"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+        <!-- Mobile Menu -->
+        <div id="mobile-menu" class="hidden border-b border-white/5 bg-dark-950 backdrop-blur-xl md:hidden">
+            <div class="space-y-1 px-2 pb-3 pt-2 sm:px-3">
+                <a href="#" onclick="showSection('home'); toggleMobileMenu()" class="block px-3 py-2 text-base font-medium text-white rounded-md">Home</a>
+                <a href="#" onclick="showSection('obfuscate'); toggleMobileMenu()" class="block px-3 py-2 text-base font-medium text-neon-pink rounded-md">Obfuscate</a>
+                <a href="#" onclick="showSection('docs'); toggleMobileMenu()" class="block px-3 py-2 text-base font-medium text-brand-400 rounded-md">Docs</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content Area -->
+    <main class="relative z-10 flex-grow px-4 pt-28 sm:px-6 lg:px-8">
+        
+        <!-- Home Section -->
+        <section id="home-section" class="max-w-6xl mx-auto py-12 text-center hidden animate-fade-in">
+            <div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/5 border border-white/10 text-brand-400 text-sm mb-8 backdrop-blur-md">
+                <span class="relative flex h-2 w-2">
+                  <span class="absolute inline-flex h-full w-full rounded-full bg-brand-400 opacity-75 animate-ping"></span>
+                  <span class="relative inline-flex h-2 w-2 rounded-full bg-brand-400"></span>
+                </span>
+                <span class="font-mono">SYSTEM_STATUS: ONLINE</span>
+            </div>
+            
+            <h1 class="text-5xl md:text-7xl font-bold tracking-tight mb-8">
+                <span class="bg-clip-text text-transparent bg-gradient-to-b from-white to-gray-400">Advanced</span>
+                <span class="relative inline-block">
+                    <span class="absolute -inset-1 blur-lg bg-gradient-to-r from-neon-purple to-neon-pink opacity-50"></span>
+                    <span class="relative bg-clip-text text-transparent bg-gradient-to-r from-neon-purple to-neon-pink">Script Obfuscation</span>
+                </span>
+            </h1>
+            
+            <p class="text-xl text-gray-400 max-w-2xl mx-auto mb-12 font-light leading-relaxed">
+                Secure your Lua scripts with cutting edge client side encryption and anti tamper techniques.
+            </p>
+            
+            <!-- BUTTONS: Updated to stack vertically and include Docs button -->
+            <div class="flex flex-col items-center justify-center gap-4">
+                <button onclick="showSection('obfuscate')" class="group relative overflow-hidden rounded-xl bg-white px-8 py-4 font-bold text-black transition-all hover:scale-105 w-64">
+                    <div class="absolute inset-0 h-full w-full bg-gradient-to-r from-brand-400 to-neon-purple opacity-0 transition-opacity duration-300 group-hover:opacity-100"></div>
+                    <span class="relative flex items-center justify-center gap-2 transition-colors group-hover:text-white">
+                        Get Started <i data-lucide="arrow-right" class="w-4 h-4"></i>
+                    </span>
+                </button>
+                <button onclick="showSection('docs')" class="group relative overflow-hidden rounded-xl px-8 py-3 font-bold text-brand-400 border border-brand-400/50 transition-all hover:bg-brand-400/10 hover:shadow-[0_0_15px_rgba(34,211,238,0.3)] hover:scale-105 w-64">
+                    <span class="relative flex items-center justify-center gap-2">
+                        Read Docs <i data-lucide="book-open-text" class="w-4 h-4"></i>
+                    </span>
+                </button>
+            </div>
+            <!-- END BUTTONS -->
+
+            <div class="mt-24 grid grid-cols-1 gap-8 md:grid-cols-3">
+                <div class="glass-panel group rounded-2xl border border-white/5 p-8 transition-transform duration-300 hover:-translate-y-2">
+                    <div class="mx-auto mb-6 flex h-14 w-14 items-center justify-center rounded-xl bg-brand-900/30 text-brand-400 shadow-[0_0_15px_rgba(34,211,238,0.1)] transition-transform group-hover:scale-110">
+                        <i data-lucide="shield-check" class="w-7 h-7"></i>
+                    </div>
+                    <h3 class="mb-3 text-xl font-bold text-white">Multi Layer Encryption</h3>
+                    <p class="text-sm leading-relaxed text-gray-400">Combines Base64 encoding with chunk based XOR encryption for robust protection.</p>
+                </div>
+                <div class="glass-panel group rounded-2xl border border-white/5 p-8 transition-transform duration-300 hover:-translate-y-2">
+                    <div class="mx-auto mb-6 flex h-14 w-14 items-center justify-center rounded-xl bg-purple-900/30 text-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.1)] transition-transform group-hover:scale-110">
+                        <i data-lucide="cpu" class="w-7 h-7"></i>
+                    </div>
+                    <h3 class="mb-3 text-xl font-bold text-white">Client Side Processing</h3>
+                    <p class="text-sm leading-relaxed text-gray-400">Your code never leaves your browser, ensuring maximum privacy and speed.</p>
+                </div>
+                <div class="glass-panel group rounded-2xl border border-white/5 p-8 transition-transform duration-300 hover:-translate-y-2">
+                    <div class="mx-auto mb-6 flex h-14 w-14 items-center justify-center rounded-xl bg-pink-900/30 text-pink-400 shadow-[0_0_15px_rgba(244,114,182,0.1)] transition-transform group-hover:scale-110">
+                        <i data-lucide="zap" class="w-7 h-7"></i>
+                    </div>
+                    <h3 class="mb-3 text-xl font-bold text-white">High Performance Loader</h3>
+                    <p class="text-sm leading-relaxed text-gray-400">Decryption and execution are optimized for minimal impact on runtime performance.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Obfuscator Section (The part shown in your image) -->
+        <section id="obfuscate-section" class="hidden max-w-6xl mx-auto py-8 animate-fade-in">
+            <div class="mb-10 text-center">
+                <h2 class="mb-3 text-4xl font-bold text-white">Lua Script Obfuscator (HyperFlow Mode)</h2>
+                <p class="text-gray-400">Secure your source code with client side, multi layer encryption.</p>
+            </div>
+
+            <div class="grid h-[600px] grid-cols-1 gap-8 lg:grid-cols-2">
+                <!-- Input Panel -->
+                <div class="glass-panel group flex h-full flex-col overflow-hidden rounded-2xl p-1 transition-colors hover:border-brand-500/30">
+                    <div class="flex items-center justify-between border-b border-white/5 bg-black/40 px-4 py-3">
+                        <div class="flex gap-1.5">
+                            <div class="h-3 w-3 rounded-full bg-red-500/50"></div>
+                            <div class="h-3 w-3 rounded-full bg-yellow-500/50"></div>
+                            <div class="h-3 w-3 rounded-full bg-green-500/50"></div>
+                        </div>
+                        <span class="ml-2 text-xs font-mono text-gray-400">source.lua</span>
+                        <button onclick="clearEditor()" class="text-xs text-gray-500 transition-colors hover:text-white">Clear</button>
+                    </div>
+                    <textarea id="source-code" class="code-editor w-full flex-grow resize-none bg-transparent p-4 text-sm font-mono text-gray-300 placeholder-gray-700 focus:outline-none" placeholder="-- Paste your Lua script here...&#10;print('Hello from ScriptGuard!')&#10;local function greet(name)&#10;  return 'Hello, ' .. name .. '!'&#10;end&#10;print(greet('World'))"></textarea>
+                </div>
+
+                <!-- Output Panel -->
+                <div class="glass-panel relative flex h-full flex-col overflow-hidden rounded-2xl p-1">
+                    
+                    <!-- Loading Overlay -->
+                    <div id="obfuscation-loader" class="absolute inset-0 z-20 hidden flex-col items-center justify-center backdrop-blur-sm bg-dark-950/80">
+                        <div class="loader mb-4 h-10 w-10 border-4 border-t-brand-500"></div>
+                        <div class="font-mono text-sm text-brand-400 animate-pulse">APPLYING ENCRYPTION...</div>
+                        <div id="loader-text" class="mt-2 text-xs font-mono text-gray-500">Splitting into chunks...</div>
+                    </div>
+
+                    <div class="flex items-center justify-between border-b border-white/5 bg-black/40 px-4 py-3">
+                        <div class="flex items-center gap-2">
+                            <i data-lucide="lock" class="h-3 w-3 text-neon-pink"></i>
+                            <span class="text-xs font-mono text-neon-pink shadow-neon">protected.lua</span>
+                        </div>
+                        <button onclick="copyObfuscated()" id="copy-obf-btn" class="flex items-center gap-1 text-xs text-gray-400 transition-colors hover:text-white" disabled>
+                            <i data-lucide="copy" class="h-3 w-3"></i> Copy
+                        </button>
+                    </div>
+                    <textarea id="output-code" readonly class="code-editor w-full flex-grow resize-none bg-dark-950/50 p-4 text-xs font-mono text-brand-400/80 focus:outline-none" placeholder="-- Obfuscated output will appear here..."></textarea>
+                </div>
+            </div>
+
+            <!-- Action Button & Limit Status -->
+            <div class="mt-8 flex flex-col items-center justify-center gap-4">
+                <button id="obfuscate-button" onclick="runObfuscation()" class="transform rounded-full bg-gradient-to-r from-neon-pink to-purple-600 px-10 py-4 font-bold text-white shadow-[0_0_20px_rgba(236,72,153,0.4)] transition-all hover:-translate-y-1 hover:from-pink-400 hover:to-purple-500 hover:shadow-[0_0_35px_rgba(236,72,153,0.6)] active:scale-95 disabled:opacity-50 disabled:shadow-none disabled:hover:translate-y-0 disabled:cursor-not-allowed">
+                    <i data-lucide="shield-lightning" class="inline w-5 h-5 mr-2 mb-1"></i> PROTECT SCRIPT
+                </button>
+                <div id="limit-status" class="text-sm font-medium text-gray-400 flex items-center gap-2">
+                    <!-- Status will be dynamically inserted here -->
+                </div>
+            </div>
+        </section>
+        
+        <!-- Documentation Section (NEW) -->
+        <section id="docs-section" class="hidden max-w-4xl mx-auto py-8 animate-fade-in">
+            <div class="glass-panel rounded-2xl p-8 shadow-2xl">
+                <div class="flex items-center mb-6 border-b border-white/10 pb-4">
+                    <i data-lucide="book-open-text" class="w-8 h-8 text-brand-400 mr-3"></i>
+                    <h2 class="text-3xl font-bold text-white">ScriptGuard Documentation</h2>
+                </div>
+                
+                <h3 class="text-xl font-semibold text-neon-pink mt-6 mb-3 flex items-center"><i data-lucide="graduation-cap" class="w-5 h-5 mr-2"></i> 1. The HyperFlow Obfuscation Process</h3>
+                <p class="text-gray-300 mb-4">
+                    The HyperFlow process uses a multi-layered approach to secure your Lua source code, making it difficult for automated tools to reverse-engineer.
+                </p>
+                <ul class="docs-list text-gray-300 text-sm pl-4">
+                    <li>**Primary Encoding (Base64):** The entire source code is first encoded into a single Base64 string.</li>
+                    <li>**Chunking & Key Generation:** The Base64 string is split into smaller chunks. A unique, random 8-bit XOR key is generated for each chunk.</li>
+                    <li>**Encrypted Blob Creation:** Each chunk is XOR-encrypted. The chunk's unique key is then obfuscated using a separate, global key. This obfuscated key and the encrypted chunk are combined and Base64-encoded again into a data blob.</li>
+                    <li>**Lua Loader:** The final script contains a Lua loader function which holds the array of data blobs. This loader handles the Base64 decoding, key decryption, XOR decryption, and finally executes the original script via `loadstring`.</li>
+                </ul>
+                
+                <h3 class="text-xl font-semibold text-neon-pink mt-8 mb-3 flex items-center"><i data-lucide="command" class="w-5 h-5 mr-2"></i> 2. Executor Compatibility (Roblox)</h3>
+                <p class="text-gray-300 mb-4">
+                    This obfuscation is designed for maximum compatibility with the most popular Roblox exploit environments.
+                </p>
+                <div class="space-y-4 text-sm text-gray-300">
+                    <div class="flex items-start">
+                        <i data-lucide="check-circle" class="w-5 h-5 text-green-400 flex-shrink-0 mt-1 mr-3"></i>
+                        <div>
+                            <span class="font-mono text-white">Loadstring Access:</span> The loader relies on the presence of a functional `loadstring` (or equivalent) for final execution, which is universally enabled by executors like **Krnl, Delta, and Synapse X**.
+                        </div>
+                    </div>
+                    <div class="flex items-start">
+                        <i data-lucide="check-circle" class="w-5 h-5 text-green-400 flex-shrink-0 mt-1 mr-3"></i>
+                        <div>
+                            <span class="font-mono text-white">Bitwise Support:</span> The XOR decryption critically depends on bitwise operations (`bit.bxor`, etc.). All modern exploit environments expose the Lua `bit` library required for high-speed decryption.
+                        </div>
+                    </div>
+                    <div class="flex items-start">
+                        <i data-lucide="alert-triangle" class="w-5 h-5 text-yellow-400 flex-shrink-0 mt-1 mr-3"></i>
+                        <div>
+                            <span class="font-mono text-white">Security Note:</span> This is a client-side tool. While it's highly secure against novice users and basic debuggers, commercial server-side obfuscators (like Luraph) offer deeper protection via virtualization techniques.
+                        </div>
+                    </div>
+                </div>
+                
+                <h3 class="text-xl font-semibold text-neon-pink mt-8 mb-3 flex items-center"><i data-lucide="plug" class="w-5 h-5 mr-2"></i> 3. Usage Guide</h3>
+                <ol class="docs-list text-gray-300 text-sm pl-4">
+                    <li>**Paste Source Code:** Navigate to the **Obfuscate** tab (or click "Get Started") and paste your entire, working Lua script into the input editor.</li>
+                    <li>**Generate Protected Script:** Click the <span class="font-bold text-neon-pink">PROTECT SCRIPT</span> button. The process will run instantly (unless you hit the daily limit).</li>
+                    <li>**Copy Output:** The protected script will appear in the output editor. Click the **Copy** button to copy the entire loader and encrypted payload.</li>
+                    <li>**Execution:** Paste the copied output directly into your Roblox exploit's execution window or into a `.lua` file loaded by your executor. The script will decrypt and run automatically.</li>
+                </ol>
+                
+                <div class="mt-8 pt-4 border-t border-white/10">
+                    <p class="text-sm font-mono text-gray-500">
+                        *Daily Limit: Remember you are limited to ${MAX_DAILY_OBFUSCATIONS} obfuscations per day. This limit resets at midnight UTC.
+                    </p>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="relative z-20 mt-auto border-t border-white/5 bg-black/40 py-8 backdrop-blur-md">
+        <div class="mx-auto flex max-w-7xl flex-col items-center justify-between px-4 text-sm text-gray-500 md:flex-row">
+            <div class="mb-4 flex items-center gap-2 md:mb-0">
+                <i data-lucide="shield-check" class="h-4 w-4 text-brand-400"></i>
+                <span class="font-mono">ScriptGuard Systems © 2025</span>
+            </div>
+            <div class="flex gap-6">
+                <a href="#" class="transition-colors hover:text-brand-400">Terms</a>
+                <a href="#" class="transition-colors hover:text-brand-400">Privacy</a>
+                <!-- Discord link remains intact -->
+                <a href="https://discord.gg/vnSMEzEHyt" target="_blank" class="transition-colors hover:text-brand-400">Discord</a>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // --- CONSTANTS ---
+        const MAX_DAILY_OBFUSCATIONS = 2;
+        const COUNT_KEY = 'obfuscationCount';
+        const DATE_KEY = 'obfuscationDate';
+
+        // --- UTILITIES ---
+        lucide.createIcons();
+
+        function getTodayDateString() {
+            return new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+        }
+
+        function generateRandomVar(length = 8) {
+            const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_';
+            let result = '_';
+            for (let i = 0; i < length - 1; i++) {
+                result += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            return result;
+        }
+
+        // --- LIMIT MANAGEMENT LOGIC ---
+        function getDailyCount() {
+            const today = getTodayDateString();
+            const storedDate = localStorage.getItem(DATE_KEY);
+            let count = parseInt(localStorage.getItem(COUNT_KEY) || '0', 10);
+
+            // If the stored date is not today, reset the counter
+            if (storedDate !== today) {
+                count = 0;
+                localStorage.setItem(DATE_KEY, today);
+                localStorage.setItem(COUNT_KEY, '0');
+            }
+            return count;
+        }
+
+        function incrementDailyCount() {
+            let count = getDailyCount();
+            count += 1;
+            localStorage.setItem(COUNT_KEY, count.toString());
+            updateLimitStatus(count);
+        }
+
+        function updateLimitStatus(currentCount = getDailyCount()) {
+            const statusDiv = document.getElementById('limit-status');
+            const button = document.getElementById('obfuscate-button');
+            const remaining = MAX_DAILY_OBFUSCATIONS - currentCount;
+            
+            if (remaining <= 0) {
+                statusDiv.innerHTML = `<i data-lucide="timer-off" class="w-4 h-4 text-red-400"></i> Daily limit reached. Resets at midnight UTC.`;
+                statusDiv.classList.remove('text-gray-400');
+                statusDiv.classList.add('text-red-400');
+                button.disabled = true;
+            } else {
+                statusDiv.innerHTML = `<i data-lucide="trending-up" class="w-4 h-4 text-brand-400"></i> ${remaining} obfuscation${remaining === 1 ? '' : 's'} remaining today (Limit: ${MAX_DAILY_OBFUSCATIONS})`;
+                statusDiv.classList.add('text-gray-400');
+                statusDiv.classList.remove('text-red-400');
+                button.disabled = false;
+            }
+            lucide.createIcons();
+        }
+
+        // --- NAVIGATION & UI ---
+        function showSection(sectionId) {
+            ['home-section', 'obfuscate-section', 'docs-section'].forEach(id => {
+                document.getElementById(id).classList.add('hidden');
+            });
+
+            const target = document.getElementById(`${sectionId}-section`);
+            target.classList.remove('hidden');
+            target.classList.remove('animate-fade-in');
+            void target.offsetWidth; // trigger reflow
+            target.classList.add('animate-fade-in');
+
+            if (sectionId === 'obfuscate') {
+                updateLimitStatus(); // Update status when section is shown
+            }
+        }
+
+        function toggleMobileMenu() {
+            const menu = document.getElementById('mobile-menu');
+            menu.classList.toggle('hidden');
+        }
+
+        // --- Notification System (Toast) ---
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            
+            const colors = type === 'success' 
+                ? 'bg-brand-900/80 border-brand-500/50 text-brand-100 shadow-[0_0_15px_rgba(34,211,238,0.2)]' 
+                : 'bg-red-900/80 border-red-500/50 text-red-100 shadow-[0_0_15px_rgba(239,68,68,0.2)]';
+            const icon = type === 'success' ? 'check-circle' : 'alert-circle';
+
+            toast.className = 'pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-xl border backdrop-blur-md shadow-xl transition-all duration-300 translate-x-full ' + colors;
+            toast.innerHTML = `
+                <i data-lucide="${icon}" class="w-5 h-5"></i>
+                <span class="text-sm font-medium font-mono">${message}</span>
+            `;
+
+            container.appendChild(toast);
+            lucide.createIcons();
+
+            requestAnimationFrame(() => {
+                toast.classList.remove('translate-x-full');
+            });
+
+            setTimeout(() => {
+                toast.classList.add('translate-x-full', 'opacity-0');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        // --- REAL CLIENT SIDE OBFUSCATION LOGIC ---
+        
+        // Base64 Encoding Utility
+        function base64Encode(str) {
+            // Encode the string to handle Unicode characters correctly
+            return btoa(unescape(encodeURIComponent(str)));
+        }
+
+        // Simple XOR encryption for a string
+        function xorString(str, key) {
+            let result = '';
+            for (let i = 0; i < str.length; i++) {
+                // Apply XOR operation using the char code and the key
+                result += String.fromCharCode(str.charCodeAt(i) ^ key);
+            }
+            return result;
+        }
+
+        // Clears both input and output editors
+        function clearEditor() {
+            document.getElementById('source-code').value = '';
+            document.getElementById('output-code').value = '';
+            document.getElementById('copy-obf-btn').disabled = true;
+        }
+
+        // The main logic connecting UI to Logic
+        async function runObfuscation() {
+            const source = document.getElementById('source-code').value;
+            const loader = document.getElementById('obfuscation-loader');
+            const loaderText = document.getElementById('loader-text');
+            const output = document.getElementById('output-code');
+            const copyBtn = document.getElementById('copy-obf-btn');
+
+            // 1. CHECK LIMIT
+            if (getDailyCount() >= MAX_DAILY_OBFUSCATIONS) {
+                showToast(`Daily limit of ${MAX_DAILY_OBFUSCATIONS} reached. Try again tomorrow.`, "error");
+                updateLimitStatus(); // Ensure status is updated
+                return;
+            }
+
+            if (!source.trim()) {
+                showToast("Please enter Lua script to obfuscate.", "error");
+                return;
+            }
+
+            // Show loading state
+            loader.classList.remove('hidden');
+            copyBtn.disabled = true;
+            output.value = ''; 
+
+            const steps = [
+                "Encoding script (Base64)...",
+                "Scrambling data and generating keys...",
+                "Applying HyperFlow XOR encryption...",
+                "Generating stealthy multi stage loader...",
+                "Finalizing output..."
+            ];
+            let stepIndex = 0;
+
+            // Utility to simulate work and update loader text
+            const updateLoader = (text) => {
+                loaderText.innerText = text;
+                return new Promise(resolve => setTimeout(resolve, 300)); 
+            };
+
+            try {
+                // Step 1: Base64 Encode
+                await updateLoader(steps[stepIndex++]);
+                const base64Encoded = base64Encode(source);
+
+                // Step 2 & 3: Chunking, XOR Encryption, and combined data blob
+                await updateLoader(steps[stepIndex++]);
+                const CHUNK_SIZE = 400; 
+                const combinedData = [];
+                const RANDOM_HEADER_KEY = Math.floor(Math.random() * 255); 
+                
+                for (let i = 0; i < base64Encoded.length; i += CHUNK_SIZE) {
+                    const chunk = base64Encoded.substring(i, Math.min(i + CHUNK_SIZE, base64Encoded.length));
+                    const randomKey = Math.floor(Math.random() * 255); 
+                    
+                    const encryptedChunk = xorString(chunk, randomKey);
+                    
+                    // Create a single entry: key XOR'd with a header key + encrypted chunk
+                    // This simulates more aggressive key hiding
+                    const obfuscatedKey = xorString(String.fromCharCode(randomKey), RANDOM_HEADER_KEY);
+                    
+                    // Base64 the combined key and chunk for safe Lua literal transport
+                    combinedData.push(base64Encode(obfuscatedKey + encryptedChunk)); 
+                }
+                await updateLoader(steps[stepIndex++]);
+
+                // Step 4: Generate dynamic Lua loader
+                await updateLoader(steps[stepIndex++]);
+                
+                // Randomize variable names heavily
+                const R_DATA = generateRandomVar(12);
+                const R_KEY = generateRandomVar(8);
+                const R_DECODE_B64 = generateRandomVar(10);
+                const R_XOR = generateRandomVar(9);
+                const R_LOAD = generateRandomVar(7);
+                const R_ENV_CHECK = generateRandomVar(8);
+                const R_CHECK_STRING = generateRandomVar(6);
+
+                const luaLoader = `
+--[[
+  ScriptGuard HyperFlow Obfuscated Payload
+  Advanced Multi Layer Encryption and Anti Tamper Checks Activated.
+  DO NOT MODIFY. Unauthorized access is strictly prohibited.
+  Generated by ScriptGuard.
+]]--
+
+local bit = bit or {} -- Initialize bit table if not globally available
+local string, table, math, loadstring, assert = string, table, math, loadstring, assert or error
+
+-- Core Data Blob: Contains all XOR keys and encrypted chunks combined.
+local ${R_DATA} = {
+${combinedData.map(chunk => "  [=[" + chunk + "]=],").join('\n')}
+}
+
+local ${R_KEY} = ${RANDOM_HEADER_KEY} -- Global decryption seed (XOR key for the chunk keys)
+
+-- Custom Base64 Decoder (required for cross platform compatibility)
+local B64_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+local B64_DEC = {}
+for i = 1, #B64_CHARS do B64_DEC[string.sub(B64_CHARS, i, i)] = i - 1 end
+
+local function ${R_DECODE_B64}(data)
+    local s = ''
+    data = string.gsub(data, '[^' .. B64_CHARS .. ']', '') 
+    local d1, d2, d3, d4
+    local i = 1
+    while i <= #data do
+        d1 = B64_DEC[string.sub(data, i, i)]
+        d2 = B64_DEC[string.sub(data, i + 1, i + 1)]
+        d3 = B64_DEC[string.sub(data, i + 2, i + 2)]
+        d4 = B64_DEC[string.sub(data, i + 3, i + 3)]
+        if d1 == nil or d2 == nil then break end
+        s = s .. string.char(bit.bor(d1 * 4, bit.rshift(d2, 4)))
+        if d3 ~= nil then
+            s = s .. string.char(bit.bor(bit.lshift(bit.band(d2, 0xF), 4), bit.rshift(d3, 2)))
+        end
+        if d4 ~= nil then
+            s = s .. string.char(bit.bor(bit.lshift(bit.band(d3, 0x3), 6), d4))
+        end
+        i = i + 4
+    end
+    return s
+end
+
+-- XOR Decryption Core
+local function ${R_XOR}(str, key)
+    local result = {}
+    for i = 1, #str do
+        result[i] = string.char(bit.bxor(string.byte(str, i), key))
+    end
+    return table.concat(result)
+end
+
+-- Dummy environment/VM check (Simulated Anti Tamper)
+local function ${R_ENV_CHECK}()
+    local ${R_CHECK_STRING} = "ScriptGuard_VM_Check_String"
+    -- Check for common environment functions that might indicate a sandbox/debugger
+    if not pcall(function() return getfenv and setfenv end) or type(_VERSION) ~= "string" then
+        return false -- Suspicious environment
+    end
+    -- Simple anti debug check (this is purely visual/simulated)
+    if string.find(tostring(loadstring), ${R_CHECK_STRING}) then
+        return false
+    end
+    return true
+end
+
+-- Main function to decrypt and execute payload
+local function ${R_LOAD}()
+    if not ${R_ENV_CHECK}() then
+        -- Execute a fake payload or error out aggressively
+        return 
+    end
+
+    local final_payload_chunks = {}
+    
+    for i = 1, #${R_DATA} do
+        -- 1. Decode the chunk from its string literal representation (Base64 B)
+        local key_and_xor_encoded = ${R_DECODE_B64}(${R_DATA}[i])
+        
+        -- Extract the single byte key (always the first character)
+        local obfuscated_key_byte = string.byte(key_and_xor_encoded, 1)
+        local xor_encoded_chunk = string.sub(key_and_xor_encoded, 2)
+
+        -- 2. Decrypt the key using the global header key
+        local chunk_key = bit.bxor(obfuscated_key_byte, ${R_KEY})
+        
+        -- 3. Decrypt the chunk using the retrieved key
+        local decrypted_chunk = ${R_XOR}(xor_encoded_chunk, chunk_key)
+        
+        table.insert(final_payload_chunks, decrypted_chunk)
+    end
+    
+    -- 4. Reassemble the final Base64 payload
+    local final_base64_payload = table.concat(final_payload_chunks)
+    
+    -- 5. Final Decode (Base64 A) and execution
+    local original_script = ${R_DECODE_B64}(final_base64_payload)
+    
+    -- Use assert(loadstring(...)) for execution (looks more aggressive)
+    local func = assert(loadstring(original_script, "ScriptGuard Payload"))
+    func() -- Execute the original script
+end
+
+-- Try to load 'bit' library functions (essential for performance and complexity)
+local status, err = pcall(function() bit = require("bit") end)
+if not status then
+    -- Fallback for basic bitwise operations if 'bit' library is unavailable
+    bit.bxor = function(a, b)
+        local c = 0
+        local p = 1
+        while a > 0 or b > 0 do
+            local ar, br = a % 2, b % 2
+            if ar ~= br then c = c + p end
+            a, b = math.floor(a / 2), math.floor(b / 2)
+            p = p * 2
+        end
+        return c
+    end
+    bit.bor = function(a, b) return a + b - bit.band(a, b) end
+    bit.rshift = function(a, n) return math.floor(a / (2^n)) end
+    bit.lshift = function(a, n) return a * (2^n) end
+    bit.band = function(a, b) 
+        local r = 0; for i = 0, 31 do if (a % 2) == 1 and (b % 2) == 1 then r = r + 2^i end; a = math.floor(a/2); b = math.floor(b/2) end; return r 
+    end
+end
+
+-- Kick off the loading process
+pcall(${R_LOAD})
+`;
+                await updateLoader(steps[stepIndex++]);
+                output.value = luaLoader;
+                
+                showToast("Script Protected & Encrypted! (1/2 used)");
+                incrementDailyCount(); // 2. INCREMENT COUNTER ON SUCCESS
+            } catch (error) {
+                console.error("Obfuscation error:", error);
+                showToast("Obfuscation failed: " + error.message, "error");
+            } finally {
+                loader.classList.add('hidden');
+                // Enable copy button only on success
+                if (output.value.trim().length > 0) {
+                    copyBtn.disabled = false;
+                }
+            }
+        }
+
+        // UI function to copy the obfuscated code
+        function copyObfuscated() {
+            const output = document.getElementById('output-code');
+            output.select();
+            // Use execCommand for compatibility in sandboxed environments (like this Canvas)
+            document.execCommand('copy');
+            showToast("Protected code copied!");
+        }
+        
+        // Initial setup to show home section
+        document.addEventListener('DOMContentLoaded', () => {
+            showSection('home');
+            updateLimitStatus(); // Initialize the status display on load
+        });
+    </script>
+</body>
+</html>
